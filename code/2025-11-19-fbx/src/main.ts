@@ -5,9 +5,9 @@ import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader.js";
 const scene = new THREE.Scene();
 
 const loader = new FBXLoader();
-const object = await loader.loadAsync("/landscape.fbx");
+const object = await loader.loadAsync("/tentacles.fbx");
 object.position.set(0, 0, 0);
-object.scale.set(0.01, 0.01, 0.01);
+// object.scale.set(0.1, 0.1, 0.1);
 
 const renderer = new THREE.WebGLRenderer();
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -20,6 +20,7 @@ const camera = new THREE.PerspectiveCamera(
   1000
 );
 camera.position.z = 200;
+camera.position.y = 80;
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
@@ -36,10 +37,10 @@ scene.add(object);
 
 function animate() {
   requestAnimationFrame(animate);
+  console.log(camera.position);
+
   controls.update();
   renderer.render(scene, camera);
-
-  camera.position.x += 0.1;
 }
 
 animate();
