@@ -1,139 +1,74 @@
 import * as THREE from "three";
-import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { ARButton } from "three/addons/webxr/ARButton.js";
+import { LoopSubdivision } from "three-subdivide";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 
-let camera: THREE.PerspectiveCamera;
-let scene: THREE.Scene;
-let renderer: THREE.WebGLRenderer;
-let reticle: THREE.Mesh;
-let hitTestSource: XRHitTestSource | null = null;
-let hitTestSourceRequested = false;
-let cityModel: THREE.Object3D | null = null;
+// Création classique
+const scene = new THREE.Scene();
+const renderer = new THREE.WebGLRenderer();
+const camera = new THREE.PerspectiveCamera(
+  75,
+  window.innerWidth / window.innerHeight,
+  0.1,
+  1000
+);
+camera.position.z = 5;
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
 
-function init() {
-  // Container
-  const container = document.createElement("div");
-  document.body.appendChild(container);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.05;
 
-  // Scene
-  scene = new THREE.Scene();
+// Lumière
+const light = new THREE.DirectionalLight(0xffffff, 1);
+light.position.set(5, 5, 5);
+scene.add(light);
 
-  // Camera
-  camera = new THREE.PerspectiveCamera(
-    70,
-    window.innerWidth / window.innerHeight,
-    0.01,
-    20
-  );
+// Création du cube avec subdivision
+let geometry: THREE.BufferGeometry = new THREE.BoxGeometry(1, 1, 1);
+const iterations = 3; // Niveau de subdivision
 
-  // Lighting
-  const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
-  light.position.set(0.5, 1, 0.25);
-  scene.add(light);
+// Appliquer la subdivision
+geometry = LoopSubdivision.modify(geometry, iterations) as THREE.BufferGeometry;
 
-  // Renderer
-  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-  renderer.setPixelRatio(window.devicePixelRatio);
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.xr.enabled = true;
-  container.appendChild(renderer.domElement);
+// Recalculer les normales pour des faces lisses
+geometry.computeVertexNormals();
 
-  // AR Button
-  document.body.appendChild(
-    ARButton.createButton(renderer, {
-      requiredFeatures: ["hit-test"],
-    })
-  );
+// Matériau classique
+const material = new THREE.MeshStandardMaterial({
+  color: 0xff6699,
+  metalness: 0.3,
+  roughness: 0.4,
+});
 
-  // Reticle (indicateur de placement)
-  const geometry = new THREE.RingGeometry(0.15, 0.2, 32).rotateX(-Math.PI / 2);
-  const material = new THREE.MeshBasicMaterial();
-  reticle = new THREE.Mesh(geometry, material);
-  reticle.matrixAutoUpdate = false;
-  reticle.visible = false;
-  scene.add(reticle);
+const cube = new THREE.Mesh(geometry, material);
+scene.add(cube);
 
-  // Charger le modèle Blender (exporté en GLTF)
-  const loader = new GLTFLoader();
-  loader.load(
-    "/tentacles.glb", // Votre modèle exporté depuis Blender
-    (gltf) => {
-      cityModel = gltf.scene;
-      cityModel.scale.set(0.1, 0.1, 0.1); // Ajuster l'échelle
-      console.log("Modèle chargé!");
-    },
-    undefined,
-    (error) => {
-      console.error("Erreur de chargement:", error);
-    }
-  );
+// Stocker les positions originales pour l'animation
+const originalPositions = geometry.attributes.position.array.slice();
+const normals = geometry.attributes.normal.array;
 
-  // Event: tap pour placer le modèle
-  const controller = renderer.xr.getController(0);
-  controller.addEventListener("select", onSelect);
-  scene.add(controller);
+function animate(time: number) {
+  requestAnimationFrame(animate);
 
-  // Window resize
-  window.addEventListener("resize", onWindowResize);
-}
+  const t = time * 0.001;
+  const inflateAmount = 0.2 * Math.sin(t);
 
-function onSelect() {
-  if (reticle.visible && cityModel) {
-    // Cloner le modèle pour en placer plusieurs
-    const clone = cityModel.clone();
-    clone.position.setFromMatrixPosition(reticle.matrix);
-    clone.quaternion.setFromRotationMatrix(reticle.matrix);
-    scene.add(clone);
+  // Modifier les positions en fonction des normales
+  const positions = geometry.attributes.position.array;
+  for (let i = 0; i < positions.length; i += 3) {
+    positions[i] = originalPositions[i] + normals[i] * inflateAmount;
+    positions[i + 1] =
+      originalPositions[i + 1] + normals[i + 1] * inflateAmount;
+    positions[i + 2] =
+      originalPositions[i + 2] + normals[i + 2] * inflateAmount;
   }
-}
 
-function onWindowResize() {
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
-}
+  geometry.attributes.position.needsUpdate = true;
 
-function animate() {
-  renderer.setAnimationLoop(render);
-}
-
-function render(timestamp: number, frame?: XRFrame) {
-  if (frame) {
-    const referenceSpace = renderer.xr.getReferenceSpace();
-    const session = renderer.xr.getSession();
-
-    if (hitTestSourceRequested === false) {
-      session?.requestReferenceSpace("viewer").then((referenceSpace) => {
-        session
-          ?.requestHitTestSource({ space: referenceSpace })
-          ?.then((source) => {
-            hitTestSource = source;
-          });
-      });
-
-      session?.addEventListener("end", () => {
-        hitTestSourceRequested = false;
-        hitTestSource = null;
-      });
-
-      hitTestSourceRequested = true;
-    }
-
-    if (hitTestSource && referenceSpace) {
-      const hitTestResults = frame.getHitTestResults(hitTestSource);
-
-      if (hitTestResults.length) {
-        const hit = hitTestResults[0];
-        reticle.visible = true;
-        reticle.matrix.fromArray(hit.getPose(referenceSpace)!.transform.matrix);
-      } else {
-        reticle.visible = false;
-      }
-    }
-  }
+  controls.update();
 
   renderer.render(scene, camera);
 }
 
-init();
-animate();
+animate(0);
