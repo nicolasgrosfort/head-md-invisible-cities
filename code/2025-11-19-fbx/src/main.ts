@@ -5,7 +5,7 @@ import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader.js";
 const scene = new THREE.Scene();
 
 const loader = new FBXLoader();
-const object = await loader.loadAsync("/tentacles.fbx");
+const object = await loader.loadAsync("/textures.fbx");
 object.position.set(0, 0, 0);
 // object.scale.set(0.1, 0.1, 0.1);
 
@@ -17,7 +17,7 @@ const camera = new THREE.PerspectiveCamera(
   75,
   window.innerWidth / window.innerHeight,
   0.1,
-  1000
+  10000
 );
 camera.position.z = 200;
 camera.position.y = 80;
