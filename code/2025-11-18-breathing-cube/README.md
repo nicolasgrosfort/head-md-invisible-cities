@@ -1,4 +1,4 @@
-# 2025-11-18-tentacles
+# 2025-11-18-breathing-cube
 
 ## Goal
 
